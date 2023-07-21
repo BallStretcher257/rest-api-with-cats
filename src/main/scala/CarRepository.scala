@@ -1,24 +1,12 @@
+import cats.effect.Concurrent
 import doobie.implicits._
+import doobie.util.transactor.Transactor
 import doobie.util.fragment.Fragment
 
 import scala.annotation.tailrec
-
-object CarQueries {
-  def createTableQuery = {
+class CarRepository[F[_] : Concurrent](xa: Transactor[F]) {
+  def addCar(car: Car): F[Int] = {
     sql"""
-         |CREATE TABLE IF NOT EXISTS cars (
-         |  id VARCHAR(100) PRIMARY KEY,
-         |  manufacturer VARCHAR(100),
-         |  color VARCHAR(100),
-         |  releaseYear Int
-         |)
-       """
-      .stripMargin
-      .update
-  }
-
-  def addCarQuery(car: Car) = {
-      sql"""
          |INSERT INTO cars (
          |  id,
          |  manufacturer,
@@ -31,31 +19,34 @@ object CarQueries {
          |  ${car.color},
          |  ${car.releaseYear}
          |)
-       """
-        .stripMargin
-        .update
+    """
+      .stripMargin
+      .update
+      .run
+      .transact(xa)
   }
-
-  def deleteCarByIDQuery(id: String) = {
+  def deleteCarByID(id: String): F[Int] = {
     sql"""
          |DELETE FROM cars
          |WHERE id = $id
        """
-        .stripMargin
-        .update
+      .stripMargin
+      .update
+      .run
+      .transact(xa)
   }
-
-  def listAllCarsQuery = {
+  def listAllCars: F[List[Car]] = {
     sql"""
          |SELECT * FROM cars
        """
-        .stripMargin
-        .query[Car]
+      .stripMargin
+      .query[Car]
+      .to[List]
+      .transact(xa)
   }
-
-  def listCarsWithPropertiesQuery[T](propertyNames: List[String], propertyValues: List[T]) =
-    if (propertyNames.isEmpty || propertyValues.isEmpty) listAllCarsQuery
-    else  {
+  def listCarsWithProperties[T](propertyNames: List[String], propertyValues: List[T]): F[List[Car]] = {
+    if (propertyNames.isEmpty || propertyValues.isEmpty) listAllCars
+    else {
       @tailrec
       def makeConditions(conditions: Fragment, nameValuePairs: List[(String, T)]): Fragment = {
         nameValuePairs match {
@@ -63,8 +54,11 @@ object CarQueries {
           case (name, value) :: tail => makeConditions(conditions ++ fr"$name = ${value.toString} AND", tail)
         }
       }
-      val condition =  makeConditions(fr"WHERE", propertyNames.zip(propertyValues))
-      (fr"SELECT * FROM cars" ++ condition).query[Car]
+      val condition = makeConditions(fr"WHERE", propertyNames.zip(propertyValues))
+      (fr"SELECT * FROM cars" ++ condition)
+        .query[Car]
+        .to[List]
+        .transact(xa)
+    }
   }
-
 }

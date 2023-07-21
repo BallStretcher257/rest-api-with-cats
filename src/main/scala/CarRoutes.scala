@@ -1,14 +1,15 @@
-import cats.effect.IO
+import cats.effect.Concurrent
+import cats.implicits._
 import io.circe.generic.auto._
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 
 object CarRoutes {
-  def routes(queryRunner: QueryRunner): HttpRoutes[IO] = {
-    val dsl = new Http4sDsl[IO] {}
+  def routes[F[_] : Concurrent](queryRunner: CarRepository[F]): HttpRoutes[F] = {
+    val dsl = new Http4sDsl[F] {}
     import dsl._
-    HttpRoutes.of[IO] {
+    HttpRoutes.of[F] {
       case req @ POST -> Root / "cars" =>
         req.decode[Car]{
           car => queryRunner.addCar(car).flatMap(id => Created(id))
