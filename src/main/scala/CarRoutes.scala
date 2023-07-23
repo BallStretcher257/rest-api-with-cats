@@ -4,10 +4,12 @@ import cats.data.Validated._
 import doobie.implicits._
 import doobie.Transactor
 import io.circe.generic.auto._
+import io.circe.Decoder
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl._
 import org.http4s.dsl.impl._
+
 import java.time._
 import scala.util.Try
 
@@ -25,9 +27,12 @@ object CarRoutes {
       .toEither
       .leftMap(t => ParseFailure(t.getMessage, t.getMessage)))
 
+  implicit val yearDecoder: Decoder[Year] = Decoder.instance(y => y.as[Int].map(Year.of))
+
   def routes[F[_] : Concurrent](xa: Transactor[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
     import dsl._
+
 
     HttpRoutes.of[F] {
       case req @ POST -> Root / "cars" =>
