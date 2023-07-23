@@ -1,11 +1,13 @@
-import cats.effect.Concurrent
 import doobie.implicits._
-import doobie.util.transactor.Transactor
+import doobie.postgres.implicits._
 import doobie.util.fragment.Fragment
+import doobie.util.meta.Meta
 
+import java.time.Year
 import scala.annotation.tailrec
-class CarRepository[F[_] : Concurrent](xa: Transactor[F]) {
-  def addCar(car: Car): F[Int] = {
+object CarRepository {
+  implicit val yearMeta: Meta[Year] = Meta[Int].timap(Year.of)(_.getValue)
+  def addCar(car: Car): doobie.ConnectionIO[Int] = {
     sql"""
          |INSERT INTO cars (
          |  id,
@@ -23,9 +25,8 @@ class CarRepository[F[_] : Concurrent](xa: Transactor[F]) {
       .stripMargin
       .update
       .run
-      .transact(xa)
   }
-  def deleteCarByID(id: String): F[Int] = {
+  def deleteCarByID(id: String): doobie.ConnectionIO[Int] = {
     sql"""
          |DELETE FROM cars
          |WHERE id = $id
@@ -33,32 +34,60 @@ class CarRepository[F[_] : Concurrent](xa: Transactor[F]) {
       .stripMargin
       .update
       .run
-      .transact(xa)
   }
-  def listAllCars: F[List[Car]] = {
+  def listAllCars: doobie.ConnectionIO[List[Car]] = {
     sql"""
          |SELECT * FROM cars
        """
       .stripMargin
       .query[Car]
       .to[List]
-      .transact(xa)
   }
-  def listCarsWithProperties[T](propertyNames: List[String], propertyValues: List[T]): F[List[Car]] = {
-    if (propertyNames.isEmpty || propertyValues.isEmpty) listAllCars
-    else {
-      @tailrec
-      def makeConditions(conditions: Fragment, nameValuePairs: List[(String, T)]): Fragment = {
-        nameValuePairs match {
-          case List((name, value)) => conditions ++ fr"$name = ${value.toString}"
-          case (name, value) :: tail => makeConditions(conditions ++ fr"$name = ${value.toString} AND", tail)
-        }
+
+  def getCarByID(id: String): doobie.ConnectionIO[Car] = {
+    sql"""
+         |SELECT * FROM cars
+         |WHERE id = $id
+       """
+      .stripMargin
+      .query[Car]
+      .unique
+  }
+  def listCarsWithProperties(
+      maybeManufacturer: Option[String],
+      maybeColor: Option[String],
+      maybeYear: Option[Year]
+    ): doobie.ConnectionIO[List[Car]] = {
+    val maybeManufacturerCondition = maybeManufacturer.map(manufacturer => fr"manufacturer = $manufacturer")
+    val maybeColorCondition = maybeColor.map(color => fr"color = $color")
+    val maybeYearCondition = maybeYear.map(year => fr"releaseYear = $year")
+    @tailrec
+    def combineConditions(result: Fragment, conditions: List[Option[Fragment]], empty: Boolean): Option[Fragment] = {
+      conditions match {
+        case Some(fragment) :: tail =>
+          combineConditions(result ++ (if (empty) fr0"" else fr"AND") ++ fragment, tail, empty = false)
+        case None :: tail =>
+          combineConditions(result, tail, empty)
+        case Nil => if (empty) None else Some(result)
       }
-      val condition = makeConditions(fr"WHERE", propertyNames.zip(propertyValues))
-      (fr"SELECT * FROM cars" ++ condition)
-        .query[Car]
-        .to[List]
-        .transact(xa)
+    }
+    val maybeConditions = combineConditions(fr0"",
+      List(maybeManufacturerCondition,
+        maybeColorCondition,
+        maybeYearCondition
+      ),
+      empty = true
+    )
+    maybeConditions match {
+      case None => listAllCars
+      case Some(conditions) =>
+        sql"""
+             |SELECT * FROM cars
+             |WHERE $conditions
+            """
+          .stripMargin
+          .query[Car]
+          .to[List]
     }
   }
 }

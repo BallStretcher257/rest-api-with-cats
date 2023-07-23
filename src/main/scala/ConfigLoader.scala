@@ -3,7 +3,7 @@ import cats.implicits._
 import io.circe.config.parser
 import io.circe.generic.auto._
 
-case class ServerConfig(address: String, port: Int)
+case class ServerConfig(host: String, port: Int)
 
 case class DatabaseConfig(url: String, username: String, password: String)
 

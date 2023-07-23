@@ -18,7 +18,7 @@ libraryDependencies ++= {
     "org.tpolecat"  %%  "doobie-core" % doobieVersion,
     "org.tpolecat"  %%  "doobie-h2"   % doobieVersion,
     "org.tpolecat"  %% "doobie-hikari" % doobieVersion,
-    "org.tpolecat"  %% "doobie-postgres"  % "1.0.0-RC4",
+    "org.tpolecat"  %% "doobie-postgres"  % doobieVersion,
     "org.tpolecat"  %% "doobie-specs2" % doobieVersion,
     "org.http4s"  %% "http4s-ember-server" % http4sVersion,
     "org.http4s"  %% "http4s-circe" % http4sVersion,
@@ -26,6 +26,7 @@ libraryDependencies ++= {
     "io.circe"  %% "circe-core" % circeVersion,
     "io.circe"  %% "circe-generic" % circeVersion,
     "io.circe"  %% "circe-config" % "0.10.0",
+    "org.typelevel" %% "log4cats-slf4j" % "2.6.0"
   )
 
 }
